@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zenith Task Prioritizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Poppins', sans-serif;
+        background: linear-gradient(-45deg, #1e1b4b, #4c1d95, #b21f1f, #1a2a6c);
+        background-size: 400% 400%;
+        animation: gradientBG 20s ease infinite;
+      }
+
+      @keyframes gradientBG {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+      }
+      
+      .particle {
+          position: absolute;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.2);
+          pointer-events: none;
+          animation: float 25s ease-in-out infinite;
+      }
+
+      @keyframes float {
+          0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(-120vh) rotate(720deg); opacity: 0; }
+      }
+
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.5s ease-out forwards;
+      }
+
+      .form-checkbox {
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        display: inline-block;
+        vertical-align: middle;
+        background-origin: border-box;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        flex-shrink: 0;
+        height: 1.5rem;
+        width: 1.5rem;
+        color: #ec4899;
+        background-color: #374151;
+        border-color: #4b5563;
+        border-width: 1px;
+        border-radius: 0.375rem;
+      }
+      .form-checkbox:checked {
+        background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+        border-color: transparent;
+        background-color: currentColor;
+        background-size: 100% 100%;
+        background-position: center;
+        background-repeat: no-repeat;
+      }
+    </style>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "react/": "https://aistudiocdn.com/react@^19.2.0/",
+        "react": "https://aistudiocdn.com/react@^19.2.0",
+        "@dnd-kit/core": "https://aistudiocdn.com/@dnd-kit/core@^6.3.1",
+        "@dnd-kit/sortable": "https://aistudiocdn.com/@dnd-kit/sortable@^10.0.0",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+        "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+        "@dnd-kit/utilities": "https://aistudiocdn.com/@dnd-kit/utilities@^3.2.2",
+        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.1",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+        "firebase/database": "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"
+      }
+    }
+    </script>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel" data-type="module">
+// ========= EXTERNAL IMPORTS =========
+import React, { useState, useCallback, useMemo, useEffect, memo } from 'react';
+import ReactDOM from 'react-dom/client';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GoogleGenAI, Type } from "@google/genai";
+import { initializeApp } from 'firebase/app';
+import { getDatabase, ref, onValue, set, push, remove, update, get } from 'firebase/database';
+
+// ========= ICONS =========
+const PlusIcon = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+);
+const ArchiveIcon = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="3" y="3" width="18" height="5" rx="2" ry="2"></rect><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"></path><path d="M10 12h4"></path></svg>
+);
+const TrashIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+);
+const MagicWandIcon = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M15 4V2m0 16v-2m-7.5-13L6 4.5M19.5 6l-1.5-1.5m-12 12l-1.5 1.5M18 19.5l1.5 1.5M4 9h2m12 0h2M9 4v2m0 12v2m7.5-13l1.5-1.5M4.5 6l1.5-1.5m12 12l1.5 1.5M6 19.5l-1.5 1.5M12 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3z"></path></svg>
+);
+const TargetIcon = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+);
+const ClipboardListIcon = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><line x1="12" y1="11" x2="12" y2="16"></line><line x1="8" y1="11" x2="8" y2="11"></line><line x1="16" y1="11" x2="16" y2="11"></line></svg>
+);
+const GripVerticalIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <circle cx="9" cy="12" r="1"></circle>
+        <circle cx="9" cy="5" r="1"></circle>
+        <circle cx="9"cy="19" r="1"></circle>
+        <circle cx="15" cy="12" r="1"></circle>
+        <circle cx="15" cy="5" r="1"></circle>
+        <circle cx="15" cy="19" r="1"></circle>
+    </svg>
+);
+const InfoIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+    </svg>
+);
+const ClipboardCheckIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+        <path d="m9 14 2 2 4-4"></path>
+    </svg>
+);
+const ListTodoIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <rect x="3" y="5" width="6" height="6" rx="1"></rect>
+        <path d="m3 17 2 2 4-4"></path>
+        <path d="M13 6h8"></path>
+        <path d="M13 12h8"></path>
+        <path d="M13 18h8"></path>
+    </svg>
+);
+const LightbulbIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path>
+        <path d="M9 18h6"></path>
+        <path d="M10 22h4"></path>
+    </svg>
+);
+const XIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+);
+const CalendarIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+        <line x1="16" y1="2" x2="16" y2="6"></line>
+        <line x1="8" y1="2" x2="8" y2="6"></line>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+    </svg>
+);
+const EditIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+    </svg>
+);
+const FireIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M11.5 22.5c-2.3 0-4-1.8-4-4 0-3.5 4-5 4-8.5 0-1.7-1.3-3-3-3-1.5 0-2.7 1.1-3 2.5"></path><path d="M13.5 18.5c1.8 0 3-1.6 3-3.5 0-3-3-4-3-6.5 0-1.3 1-2.5 2.3-2.5 1.1 0 2.1.8 2.3 1.8"></path></svg>
+);
+const BoltIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+);
+const StarIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+);
+const MoonIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+);
+const BriefcaseIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+);
+const HomeIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+);
+const HeartPulseIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path><path d="M3.22 12H9.5l.7-1.5L13.5 14l.7-1.5h4.78"></path></svg>
+);
+const BookOpenIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+);
+const ShoppingCartIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+);
+const TagIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+);
+const SearchIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+);
+
+
+// ========= FIREBASE CONFIG =========
+const firebaseConfig = {
+  apiKey: "AIzaSyBBnAjtS0ZfjdVu459nn4kVLuc8X4377q4",
+  authDomain: "taskmanager-bbfdb.firebaseapp.com",
+  databaseURL: "https://taskmanager-bbfdb-default-rtdb.firebaseio.com",
+  projectId: "taskmanager-bbfdb",
+  storageBucket: "taskmanager-bbfdb.firebasestorage.app",
+  messagingSenderId: "455718996734",
+  appId: "1:455718996734:web:ea69dc269fcd0ab3c033af",
+  measurementId: "G-BSTXY07J27"
+};
+
+// ========= GEMINI SERVICE =========
+const API_KEY = process.env.API_KEY;
+if (!API_KEY) {
+    console.warn("API_KEY environment variable not set. Using a placeholder.");
+}
+const ai = new GoogleGenAI({ apiKey: API_KEY || "NO_API_KEY" });
+
+const geminiResponseSchema = {
+    type: Type.ARRAY,
+    items: {
+        type: Type.STRING,
+        description: 'The original task text.',
+    },
+};
+
+const prioritizeTasksWithAI = async (tasks) => {
+    const taskDetailsString = tasks.map(t => 
+        `- "${t.text}" (Priority: ${t.priority}, Category: ${t.category}${t.dueDate ? `, Due: ${t.dueDate}` : ''}${t.description ? `, Desc: ${t.description}`: ''})`
+    ).join('\n');
+
+    const prompt = `Here is my list of tasks with their details:\n${taskDetailsString}\n\nPlease analyze these tasks based on their priority, urgency (due dates), category, and content. Reorder them into the most logical and productive sequence for me to follow. Return only a JSON array of the original task texts in the new optimal order.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: geminiResponseSchema,
+            },
+        });
+        
+        const jsonText = response.text.trim();
+        const orderedTasks = JSON.parse(jsonText);
+        
+        if (!Array.isArray(orderedTasks)) {
+            throw new Error("AI response is not a valid array of task texts.");
+        }
+
+        return orderedTasks;
+    } catch (error) {
+        console.error("Error calling Gemini API:", error);
+        throw new Error("Failed to get prioritization from AI.");
+    }
+};
+
+const getAITip = async (tasks) => {
+    const activeTasks = tasks.filter(t => !t.completed);
+    const completedTasks = tasks.filter(t => t.completed);
+
+    let prompt;
+
+    if (activeTasks.length === 0 && completedTasks.length === 0) {
+        prompt = "I have no tasks right now. Can you give me one short, motivational tip to get started with my day?";
+    } else if (activeTasks.length === 0 && completedTasks.length > 0) {
+        prompt = `I've completed all my tasks for now (${completedTasks.length} done)! Give me one short, encouraging message to celebrate this achievement.`;
+    }
+    else {
+        const taskListString = activeTasks.map(t => t.text).join(', ');
+        prompt = `Based on my current to-do list ([${taskListString}]) and my completed tasks (${completedTasks.length} done so far), provide a single, short, encouraging productivity tip (2-3 sentences max) to help me stay focused and motivated. Frame it as a friendly coach.`;
+    }
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+
+        return response.text.trim();
+    } catch (error) {
+        console.error("Error calling Gemini API for a tip:", error);
+        throw new Error("Failed to get a tip from AI coach.");
+    }
+};
+
+
+// ========= FIREBASE SERVICE =========
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const tasksRef = ref(db, 'tasks');
+
+const onTasksChange = (callback) => {
+  return onValue(tasksRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      const tasksArray = Object.keys(data).map(key => ({
+        id: key,
+        ...data[key]
+      })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      callback(tasksArray);
+    } else {
+      callback([]);
+    }
+  }, (error) => {
+    console.error("Firebase read failed: ", error);
+  });
+};
+
+const addTask = async (taskData) => {
+  const newTaskRef = push(tasksRef);
+  
+  const snapshot = await get(tasksRef);
+  let newOrder = 0;
+  if (snapshot.exists()) {
+      const tasks = snapshot.val();
+      newOrder = Object.values(tasks).reduce((max, task) => Math.max(max, task.order ?? -1), -1) + 1;
+  }
+
+  const newTask = {
+    ...taskData,
+    completed: false,
+    archived: false,
+    order: newOrder,
+  };
+  
+  await set(newTaskRef, newTask);
+};
+
+const updateTask = (id, taskData) => {
+  const taskToUpdateRef = ref(db, `tasks/${id}`);
+  return update(taskToUpdateRef, taskData);
+};
+
+const archiveTask = (id) => {
+  const taskToArchiveRef = ref(db, `tasks/${id}`);
+  return update(taskToArchiveRef, { archived: true });
+};
+
+const deleteTask = (id) => {
+  const taskToDeleteRef = ref(db, `tasks/${id}`);
+  return remove(taskToDeleteRef);
+};
+
+const updateTasksBatch = (tasks) => {
+    const updates = {};
+    tasks.forEach((task, index) => {
+        const { id, ...taskData } = task;
+        const updatedTaskData = {
+            ...taskData,
+            order: index
+        };
+        updates[`/tasks/${id}`] = updatedTaskData;
+    });
+    return update(ref(db), updates);
+};
+
+
+// ========= COMPONENTS =========
+const Loader = () => {
+  return (
+    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+  );
+};
+
+const AITipModal = ({ tip, isLoading, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="ai-tip-title">
+      <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl shadow-purple-500/20 w-full max-w-md p-6 relative animate-fade-in" onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors" aria-label="Close modal">
+          <XIcon />
+        </button>
+        <div className="flex items-center gap-3 mb-4">
+          <LightbulbIcon className="w-8 h-8 text-yellow-400" />
+          <h2 id="ai-tip-title" className="text-2xl font-bold text-white">AI Productivity Coach</h2>
+        </div>
+        <div className="min-h-[100px] flex items-center justify-center">
+            {isLoading ? (
+                <div className="flex flex-col items-center gap-2">
+                    <Loader />
+                    <p className="text-gray-400">Thinking of a great tip...</p>
+                </div>
+            ) : (
+                <p className="text-gray-300 leading-relaxed text-center">{tip}</p>
+            )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const Particles = memo(() => {
+    const [particles, setParticles] = useState([]);
+
+    useEffect(() => {
+        const createParticles = () => {
+            const newParticles = Array.from({ length: 25 }).map(() => ({
+                id: Math.random(),
+                left: `${Math.random() * 100}%`,
+                size: `${Math.random() * 3 + 1}px`,
+                delay: `${Math.random() * 25}s`,
+                duration: `${Math.random() * 15 + 10}s`,
+            }));
+            setParticles(newParticles);
+        };
+        createParticles();
+    }, []);
+
+    return (
+        <div className="fixed top-0 left-0 w-full h-full -z-10 overflow-hidden" aria-hidden="true">
+            {particles.map(p => (
+                <div
+                    key={p.id}
+                    className="particle"
+                    style={{
+                        left: p.left,
+                        width: p.size,
+                        height: p.size,
+                        animationDelay: p.delay,
+                        animationDuration: p.duration,
+                        bottom: '-20px',
+                    }}
+                />
+            ))}
+        </div>
+    );
+});
+
+const StatCard = ({ icon, value, label, color }) => (
+  <div className="bg-black/20 backdrop-blur-md p-4 rounded-xl flex items-center gap-4 shadow-lg transition-transform hover:scale-105 hover:-translate-y-1">
+    <div className={`p-3 rounded-full ${color}`}>
+      {icon}
+    </div>
+    <div>
+      <p className="text-2xl font-bold text-white">{value}</p>
+      <p className="text-sm text-gray-300">{label}</p>
+    </div>
+  </div>
+);
+
+const StatsBar = ({ total, pending, completed }) => {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 animate-fade-in">
+      <StatCard icon={<ClipboardListIcon className="w-6 h-6 text-white"/>} value={total} label="Total Tasks" color="bg-blue-500/80" />
+      <StatCard icon={<ListTodoIcon className="w-6 h-6 text-white"/>} value={pending} label="Pending" color="bg-orange-500/80" />
+      <StatCard icon={<ClipboardCheckIcon className="w-6 h-6 text-white"/>} value={completed} label="Completed" color="bg-green-500/80" />
+    </div>
+  );
+};
+
+const Header = () => {
+  return (
+    <header className="text-center my-8">
+      <div className="flex justify-center items-center gap-4 mb-2">
+        <TargetIcon className="w-12 h-12 text-pink-500" />
+        <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500">
+          Zenith
+        </h1>
+      </div>
+      <p className="text-lg text-indigo-300">Your Ultimate AI Task Prioritizer</p>
+    </header>
+  );
+};
+
+const TaskItem = ({ task, onToggleTask, onArchiveTask, onDeleteTask, onEditTask }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 'auto',
+    boxShadow: isDragging ? '0 25px 50px -12px rgba(99, 102, 241, 0.25)' : 'none',
+  };
+
+  const priorityDetails = {
+    urgent: { icon: <FireIcon className="w-4 h-4"/>, color: 'text-red-400', label: 'Urgent' },
+    high: { icon: <BoltIcon className="w-4 h-4"/>, color: 'text-orange-400', label: 'High' },
+    medium: { icon: <StarIcon className="w-4 h-4"/>, color: 'text-yellow-400', label: 'Medium' },
+    low: { icon: <MoonIcon className="w-4 h-4"/>, color: 'text-blue-400', label: 'Low' },
+  };
+
+  const categoryIcons = {
+    work: <BriefcaseIcon className="w-4 h-4" />,
+    personal: <HomeIcon className="w-4 h-4" />,
+    health: <HeartPulseIcon className="w-4 h-4" />,
+    learning: <BookOpenIcon className="w-4 h-4" />,
+    shopping: <ShoppingCartIcon className="w-4 h-4" />,
+    other: <TagIcon className="w-4 h-4" />,
+  };
+
+  const getDueDateInfo = (dueDate) => {
+      if (!dueDate) return null;
+      const due = new Date(dueDate);
+      const today = new Date();
+      due.setUTCHours(0, 0, 0, 0);
+      today.setUTCHours(0, 0, 0, 0);
+      const diffTime = due.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      let text = new Date(dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      let color = 'text-gray-400';
+      if (diffDays < 0) { text = 'Overdue'; color = 'text-red-400'; }
+      else if (diffDays === 0) { text = 'Today'; color = 'text-orange-400'; }
+      else if (diffDays === 1) { text = 'Tomorrow'; color = 'text-yellow-400'; }
+      return { text, color };
+  };
+
+  const dueDateInfo = getDueDateInfo(task.dueDate);
+  const priorityInfo = priorityDetails[task.priority];
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`bg-white/5 backdrop-blur-sm rounded-lg transition-all duration-200 animate-fade-in ${task.completed ? 'opacity-50' : 'hover:bg-white/10'}`}
+    >
+      <div className="flex items-start gap-3 p-3">
+        <button {...listeners} {...attributes} className={`cursor-grab touch-none p-1 text-gray-500 hover:text-white ${task.completed ? 'hidden' : ''}`}>
+          <GripVerticalIcon />
+        </button>
+        <input
+            type="checkbox"
+            checked={task.completed}
+            onChange={() => onToggleTask(task.id)}
+            className="form-checkbox h-6 w-6 rounded-md bg-gray-700 border-gray-600 text-pink-600 focus:ring-pink-500 cursor-pointer flex-shrink-0 mt-0.5"
+        />
+        <div className="flex-grow">
+            <span className={` ${task.completed ? 'line-through text-gray-500' : 'text-gray-200'}`}>
+            {task.text}
+            </span>
+            {task.description && (
+                <p className="text-sm text-gray-400 mt-1">{task.description}</p>
+            )}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm mt-2">
+                {!task.completed && (
+                    <div className={`flex items-center gap-1.5 ${priorityInfo.color}`}>
+                        {priorityInfo.icon}
+                        <span>{priorityInfo.label}</span>
+                    </div>
+                )}
+                <div className="flex items-center gap-1.5 text-gray-400 capitalize">
+                    {categoryIcons[task.category]}
+                    <span>{task.category}</span>
+                </div>
+                {dueDateInfo && !task.completed && (
+                    <div className={`flex items-center gap-1.5 ${dueDateInfo.color}`}>
+                        <CalendarIcon className="w-4 h-4" />
+                        <span>{dueDateInfo.text}</span>
+                    </div>
+                )}
+            </div>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+            {!task.completed && (
+                <button onClick={() => onEditTask(task.id)} className="text-gray-500 hover:text-blue-400 p-1" title="Edit Task">
+                    <EditIcon />
+                </button>
+            )}
+            <button onClick={() => onArchiveTask(task.id)} className="text-gray-500 hover:text-yellow-500 p-1" title="Archive Task">
+              <ArchiveIcon />
+            </button>
+            <button onClick={() => onDeleteTask(task.id)} className="text-gray-500 hover:text-red-500 p-1" title="Delete Task Permanently">
+              <TrashIcon />
+            </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TaskList = ({
+  tasks,
+  onToggleTask,
+  onArchiveTask,
+  onDeleteTask,
+  onEditTask,
+}) => {
+  if (tasks.length === 0) {
+    return (
+      <div className="text-center py-10 text-gray-500">
+        <ClipboardListIcon className="mx-auto w-16 h-16 mb-4" />
+        <p className="text-lg font-semibold">No tasks found!</p>
+        <p>Try adjusting your filters or adding a new task.</p>
+      </div>
+    );
+  }
+
+  const activeTasks = tasks.filter(task => !task.completed);
+  const completedTasks = tasks.filter(task => task.completed);
+
+  return (
+    <div className="space-y-3 mt-4">
+       {activeTasks.map(task => (
+        <TaskItem
+          key={task.id}
+          task={task}
+          onToggleTask={onToggleTask}
+          onArchiveTask={onArchiveTask}
+          onDeleteTask={onDeleteTask}
+          onEditTask={onEditTask}
+        />
+      ))}
+      
+      {completedTasks.length > 0 && (
+        <>
+          <div className="flex items-center gap-3 py-2">
+            <hr className="flex-grow border-gray-600" />
+            <span className="text-gray-500 font-semibold">Completed</span>
+            <hr className="flex-grow border-gray-600" />
+          </div>
+          {completedTasks.map(task => (
+            <TaskItem
+              key={task.id}
+              task={task}
+              onToggleTask={onToggleTask}
+              onArchiveTask={onArchiveTask}
+              onDeleteTask={onDeleteTask}
+              onEditTask={onEditTask}
+            />
+          ))}
+        </>
+      )}
+    </div>
+  );
+};
+
+const TaskInput = ({ onAddTask, editingTask, onUpdateTask, onCancelEdit }) => {
+  const [text, setText] = useState('');
+  const [description, setDescription] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [priority, setPriority] = useState('medium');
+  const [category, setCategory] = useState('work');
+
+  const priorities = [
+      { id: 'urgent', label: 'Urgent' },
+      { id: 'high', label: 'High' },
+      { id: 'medium', label: 'Medium' },
+      { id: 'low', label: 'Low' },
+  ];
+  const categories = [
+      { id: 'work', label: '💼 Work' },
+      { id: 'personal', label: '🏠 Personal' },
+      { id: 'health', label: '💪 Health' },
+      { id: 'learning', label: '📚 Learning' },
+      { id: 'shopping', label: '🛒 Shopping' },
+      { id: 'other', label: '📌 Other' },
+  ];
+  const priorityColors = {
+      urgent: 'bg-red-500 hover:bg-red-600 border-red-500',
+      high: 'bg-orange-500 hover:bg-orange-600 border-orange-500',
+      medium: 'bg-yellow-500 hover:bg-yellow-600 border-yellow-500',
+      low: 'bg-blue-500 hover:bg-blue-600 border-blue-500',
+  };
+
+  useEffect(() => {
+    if (editingTask) {
+      setText(editingTask.text);
+      setDescription(editingTask.description || '');
+      setDueDate(editingTask.dueDate || '');
+      setPriority(editingTask.priority);
+      setCategory(editingTask.category);
+    } else {
+      resetForm();
+    }
+  }, [editingTask]);
+
+  const resetForm = () => {
+    setText('');
+    setDescription('');
+    setDueDate('');
+    setPriority('medium');
+    setCategory('work');
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+
+    const taskData = { text, description, dueDate, priority, category };
+    
+    if (editingTask) {
+        onUpdateTask({ ...editingTask, ...taskData });
+    } else {
+        onAddTask(taskData);
+    }
+    
+    resetForm();
+  };
+  
+  const today = new Date().toISOString().split('T')[0];
+
+  return (
+    <div className="bg-black/20 backdrop-blur-md rounded-xl p-4 shadow-2xl shadow-purple-500/10 mb-6 animate-fade-in">
+      <h2 className="text-xl font-bold text-gray-200 mb-4 flex items-center gap-2">
+        {editingTask ? <EditIcon /> : <PlusIcon />}
+        {editingTask ? 'Edit Task' : 'Add New Task'}
+      </h2>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <input
+          type="text"
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="Task Title"
+          className="w-full p-3 bg-gray-800 border-2 border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+          aria-label="New task title"
+          required
+        />
+        <textarea
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Add a description..."
+          rows={3}
+          className="w-full p-3 bg-gray-800 border-2 border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+          aria-label="Task description"
+        />
+        <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Priority</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {priorities.map(p => (
+                    <button
+                        type="button"
+                        key={p.id}
+                        onClick={() => setPriority(p.id)}
+                        className={`p-2 rounded-lg text-white font-semibold transition-all duration-200 border-2 ${priority === p.id ? `${priorityColors[p.id]}` : 'bg-gray-700/50 border-gray-700/50 hover:bg-gray-600/50'}`}
+                    >
+                        {p.label}
+                    </button>
+                ))}
+            </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <select
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                className="w-full p-3 bg-gray-800 border-2 border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+                aria-label="Task category"
+            >
+                {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
+            </select>
+            <div className="relative">
+                <input
+                    type="date"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    min={today}
+                    className="w-full p-3 bg-gray-800 border-2 border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all text-gray-400 pr-10"
+                    aria-label="Task due date"
+                />
+                {dueDate && (
+                    <button
+                    type="button"
+                    onClick={() => setDueDate('')}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-white"
+                    aria-label="Clear due date"
+                    >
+                    <XIcon className="w-5 h-5" />
+                    </button>
+                )}
+            </div>
+        </div>
+        
+        <div className="flex gap-2">
+            {editingTask && (
+                <button
+                    type="button"
+                    onClick={onCancelEdit}
+                    className="w-full flex items-center justify-center gap-2 p-3 bg-gray-600 hover:bg-gray-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300"
+                >
+                    Cancel
+                </button>
+            )}
+            <button
+            type="submit"
+            className="w-full flex items-center justify-center gap-2 p-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!text.trim()}
+            >
+            {editingTask ? 'Update Task' : 'Add Task'}
+            </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const Filters = ({
+  searchQuery,
+  setSearchQuery,
+  priorityFilter,
+  setPriorityFilter,
+  categoryFilter,
+  setCategoryFilter,
+}) => {
+  const priorities = ['all', 'urgent', 'high', 'medium', 'low'];
+  const categories = ['all', 'work', 'personal', 'health', 'learning', 'shopping', 'other'];
+
+  return (
+    <div className="space-y-4 mb-4">
+      <div className="relative">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search tasks..."
+          className="w-full p-3 pl-10 bg-gray-800/50 border-2 border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+        />
+        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-500">
+          <SearchIcon className="w-5 h-5" />
+        </div>
+      </div>
+      
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-400 mb-2">Filter by Priority</label>
+            <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                className="w-full p-2 bg-gray-800/50 border-2 border-gray-700 rounded-lg capitalize focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+            >
+                {priorities.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+        </div>
+        <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-400 mb-2">Filter by Category</label>
+            <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full p-2 bg-gray-800/50 border-2 border-gray-700 rounded-lg capitalize focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+            >
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ========= MAIN APP COMPONENT =========
+const App = () => {
+  const [tasks, setTasks] = useState([]);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  const [showTipModal, setShowTipModal] = useState(false);
+  const [aiTip, setAiTip] = useState('');
+  const [isTipLoading, setIsTipLoading] = useState(false);
+  
+  const [editingTask, setEditingTask] = useState(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+
+  useEffect(() => {
+    const unsubscribe = onTasksChange((newTasks) => {
+        setTasks(newTasks);
+        setIsInitialLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  const handleAddTask = (taskData) => {
+    addTask(taskData).catch(err => {
+        console.error("Failed to add task", err);
+        setError("Failed to add task. Please check your connection.");
+        setTimeout(() => setError(null), 3000);
+    });
+  };
+
+  const handleUpdateTask = (updatedTask) => {
+    const { id, ...dataToUpdate } = updatedTask;
+    updateTask(id, dataToUpdate).catch(err => {
+        console.error("Failed to update task", err);
+        setError("Failed to update task.");
+        setTimeout(() => setError(null), 3000);
+    });
+    setEditingTask(null);
+  }
+
+  const handleSetEditingTask = (id) => {
+    const taskToEdit = tasks.find(task => task.id === id);
+    if(taskToEdit) {
+      setEditingTask(taskToEdit);
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingTask(null);
+  }
+
+  const handleToggleTask = (id) => {
+    const task = tasks.find(t => t.id === id);
+    if(task) {
+      updateTask(id, { completed: !task.completed }).catch(err => {
+        console.error("Failed to toggle task", err);
+        setError("Failed to update task status.");
+        setTimeout(() => setError(null), 3000);
+      });
+    }
+  };
+
+  const handleArchiveTask = (id) => {
+    archiveTask(id).catch(err => {
+        console.error("Failed to archive task", err);
+        setError("Failed to archive task.");
+        setTimeout(() => setError(null), 3000);
+    });
+  };
+
+  const handleDeleteTask = (id) => {
+    if (window.confirm("Are you sure you want to permanently delete this task? This action cannot be undone.")) {
+        deleteTask(id).catch(err => {
+            console.error("Failed to delete task", err);
+            setError("Failed to delete task.");
+            setTimeout(() => setError(null), 3000);
+        });
+    }
+  };
+  
+  const handlePrioritize = useCallback(async () => {
+    const activeTasks = tasks.filter(t => !t.completed && !t.archived);
+    if (activeTasks.length < 2) {
+      setError("Add at least two active tasks to prioritize with AI.");
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    try {
+      const otherTasks = tasks.filter(t => t.completed || t.archived);
+      const orderedTaskTexts = await prioritizeTasksWithAI(activeTasks);
+      
+      const taskMap = new Map(activeTasks.map(task => [task.text, task]));
+      const orderedTasks = orderedTaskTexts.map(text => taskMap.get(text)).filter((task) => !!task);
+      
+      const unmappedTasks = activeTasks.filter(task => !orderedTaskTexts.includes(task.text));
+
+      const finalTaskList = [...orderedTasks, ...unmappedTasks, ...otherTasks];
+      await updateTasksBatch(finalTaskList);
+
+    } catch (e) {
+      console.error(e);
+      setError('Failed to prioritize tasks. Please try again.');
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [tasks]);
+
+  const handleGetAITip = useCallback(async () => {
+    setIsTipLoading(true);
+    setAiTip('');
+    setShowTipModal(true);
+    try {
+      const tip = await getAITip(tasks.filter(t => !t.archived));
+      setAiTip(tip);
+    } catch (e) {
+      console.error(e);
+      setAiTip('Sorry, I couldn\'t come up with a tip right now. Please try again!');
+    } finally {
+      setIsTipLoading(false);
+    }
+  }, [tasks]);
+
+  const handleDragEnd = (event) => {
+    const {active, over} = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = tasks.findIndex((item) => item.id === active.id);
+      const newIndex = tasks.findIndex((item) => item.id === over.id);
+      const reorderedTasks = arrayMove(tasks, oldIndex, newIndex);
+      
+      setTasks(reorderedTasks);
+      
+      updateTasksBatch(reorderedTasks).catch(err => {
+        console.error("Failed to save new order", err);
+        setError("Failed to save dragged order.");
+        setTimeout(() => setError(null), 3000);
+      });
+    }
+  };
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+        if (task.archived) return false;
+        const matchesSearch = task.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter;
+        const matchesCategory = categoryFilter === 'all' || task.category === categoryFilter;
+        return matchesSearch && matchesPriority && matchesCategory;
+    });
+  }, [tasks, searchQuery, priorityFilter, categoryFilter]);
+  
+  const { totalTasks, pendingTasks, completedTasksCount } = useMemo(() => {
+    const visibleTasks = tasks.filter(t => !t.archived);
+    const total = visibleTasks.length;
+    const completed = visibleTasks.filter(t => t.completed).length;
+    return {
+        totalTasks: total,
+        pendingTasks: total - completed,
+        completedTasksCount: completed,
+    };
+  }, [tasks]);
+
+  useEffect(() => {
+    if (editingTask) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [editingTask]);
+
+  if (isInitialLoading) {
+    return (
+        <div className="fixed inset-0 flex flex-col items-center justify-center text-white bg-gradient-to-br from-[#1e1b4b] to-[#1a2a6c]">
+            <Loader />
+            <p className="mt-4 text-lg font-semibold">Loading Your Zen...</p>
+        </div>
+    );
+  }
+
+  return (
+    <>
+      <Particles />
+      <div className="min-h-screen text-white p-4 sm:p-6 lg:p-8 flex flex-col items-center">
+        <div className="w-full max-w-7xl mx-auto">
+          <Header />
+          
+          <main>
+            <StatsBar total={totalTasks} pending={pendingTasks} completed={completedTasksCount} />
+
+            {error && (
+              <div className="bg-red-500/80 text-white p-3 rounded-lg text-center my-4 animate-pulse">
+                {error}
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-1">
+                <TaskInput 
+                  onAddTask={handleAddTask}
+                  editingTask={editingTask}
+                  onUpdateTask={handleUpdateTask}
+                  onCancelEdit={handleCancelEdit}
+                />
+                 <button
+                    onClick={handleGetAITip}
+                    disabled={isTipLoading}
+                    className="w-full flex mt-4 items-center justify-center gap-2 px-4 py-3 bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300"
+                >
+                    <LightbulbIcon />
+                    <span>AI Coach</span>
+                </button>
+              </div>
+
+              <div className="lg:col-span-2">
+                <div className="bg-black/20 backdrop-blur-md rounded-xl p-4 shadow-2xl shadow-purple-500/10">
+                  <div className="flex flex-col md:flex-row gap-4 justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-gray-200">Your Tasks</h2>
+                    <button
+                        onClick={handlePrioritize}
+                        disabled={isLoading || pendingTasks < 2}
+                        className="flex w-full md:w-auto items-center justify-center gap-2 px-4 py-2 bg-pink-600 hover:bg-pink-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300"
+                    >
+                        {isLoading ? (
+                        <Loader />
+                        ) : (
+                        <>
+                            <MagicWandIcon />
+                            <span>Prioritize with AI</span>
+                        </>
+                        )}
+                    </button>
+                  </div>
+                  
+                  <Filters
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    priorityFilter={priorityFilter}
+                    setPriorityFilter={setPriorityFilter}
+                    categoryFilter={categoryFilter}
+                    setCategoryFilter={setCategoryFilter}
+                  />
+
+                  <DndContext 
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext 
+                      items={filteredTasks.map(t => t.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <TaskList
+                        tasks={filteredTasks}
+                        onToggleTask={handleToggleTask}
+                        onArchiveTask={handleArchiveTask}
+                        onDeleteTask={handleDeleteTask}
+                        onEditTask={handleSetEditingTask}
+                      />
+                    </SortableContext>
+                  </DndContext>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      {showTipModal && (
+        <AITipModal 
+            isLoading={isTipLoading}
+            tip={aiTip}
+            onClose={() => setShowTipModal(false)}
+        />
+      )}
+    </>
+  );
+};
+
+
+// ========= APP ENTRY POINT =========
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error("Could not find root element to mount to");
+}
+
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+    </script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
