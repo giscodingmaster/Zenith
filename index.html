@@ -755,8 +755,6 @@ const TaskInput = ({ onAddTask, editingTask, onUpdateTask, onCancelEdit }) => {
     resetForm();
   };
   
-  const today = new Date().toISOString().split('T')[0];
-
   return (
     <div className="bg-black/20 backdrop-blur-md rounded-xl p-4 shadow-2xl shadow-purple-500/10 mb-6 animate-fade-in">
       <h2 className="text-xl font-bold text-gray-200 mb-4 flex items-center gap-2">
@@ -812,7 +810,6 @@ const TaskInput = ({ onAddTask, editingTask, onUpdateTask, onCancelEdit }) => {
                     type="date"
                     value={dueDate}
                     onChange={e => setDueDate(e.target.value)}
-                    min={today}
                     className="w-full p-3 bg-gray-800 border-2 border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all text-gray-400 pr-10"
                     aria-label="Task due date"
                 />
